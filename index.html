@@ -1,0 +1,1483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus | Interactive Data Visualization</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+        
+        :root {
+            --primary: #00ff88;
+            --secondary: #ff0080;
+            --tertiary: #00b4ff;
+            --accent: #ffaa00;
+            --bg-primary: #030014;
+            --bg-secondary: #0a0520;
+            --glass-bg: rgba(15, 15, 30, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-primary: #ffffff;
+            --text-secondary: #b8b8c8;
+            --shadow-glow: 0 0 40px rgba(0, 255, 136, 0.4);
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: var(--bg-primary);
+            overflow: hidden;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text-primary);
+            cursor: none;
+            position: relative;
+        }
+        
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background: radial-gradient(ellipse at 50% 50%, var(--bg-secondary) 0%, var(--bg-primary) 100%);
+        }
+        
+        .ui-container {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .ui-panel {
+            position: absolute;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px) saturate(180%);
+            -webkit-backdrop-filter: blur(20px) saturate(180%);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 
+                0 8px 32px rgba(0, 0, 0, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.1);
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+            pointer-events: all;
+            overflow: hidden;
+        }
+        
+        .ui-panel::before {
+            content: '';
+            position: absolute;
+            inset: -1px;
+            border-radius: 24px;
+            background: linear-gradient(135deg, 
+                rgba(0, 255, 136, 0.2) 0%, 
+                transparent 40%, 
+                transparent 60%, 
+                rgba(0, 180, 255, 0.2) 100%);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .ui-panel:hover::before {
+            opacity: 1;
+        }
+        
+        .ui-panel:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 12px 48px rgba(0, 0, 0, 0.5),
+                var(--shadow-glow),
+                inset 0 1px 0 rgba(255, 255, 255, 0.2);
+        }
+        
+        .controls {
+            top: 32px;
+            left: 32px;
+            width: 320px;
+        }
+        
+        .stats {
+            top: 32px;
+            right: 32px;
+            width: 260px;
+            padding: 20px;
+        }
+        
+        .theme-switcher {
+            bottom: 32px;
+            right: 32px;
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+        }
+        
+        .presets {
+            bottom: 32px;
+            left: 32px;
+            padding: 16px;
+            display: flex;
+            gap: 12px;
+        }
+        
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            cursor: pointer;
+            user-select: none;
+        }
+        
+        .panel-title {
+            font-size: 13px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.2px;
+            color: var(--text-secondary);
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .panel-icon {
+            width: 16px;
+            height: 16px;
+            fill: var(--primary);
+        }
+        
+        .minimize-btn {
+            width: 24px;
+            height: 24px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            margin-left: 12px;
+            flex-shrink: 0;
+        }
+        
+        .minimize-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: var(--primary);
+            transform: scale(1.1);
+        }
+        
+        .minimize-btn svg {
+            width: 12px;
+            height: 12px;
+            fill: var(--text-secondary);
+            transition: all 0.3s ease;
+        }
+        
+        .minimize-btn:hover svg {
+            fill: var(--primary);
+        }
+        
+        .panel-content {
+            opacity: 1;
+            max-height: 500px;
+            transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        
+        .ui-panel.minimized {
+            padding: 16px 20px;
+        }
+        
+        .ui-panel.minimized .panel-header {
+            margin-bottom: 0;
+        }
+        
+        .ui-panel.minimized .panel-content {
+            opacity: 0;
+            max-height: 0;
+            margin: 0;
+            overflow: hidden;
+        }
+        
+        .ui-panel.minimized .minimize-btn svg {
+            transform: rotate(180deg);
+        }
+        
+        .controls.minimized {
+            width: auto;
+        }
+        
+        .stats.minimized {
+            width: auto;
+        }
+        
+        .control-group {
+            margin-bottom: 24px;
+        }
+        
+        .control-label {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+        
+        .control-value {
+            color: var(--primary);
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        
+        .slider-container {
+            position: relative;
+            height: 40px;
+            display: flex;
+            align-items: center;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 6px;
+            -webkit-appearance: none;
+            appearance: none;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            outline: none;
+            position: relative;
+        }
+        
+        .slider-track {
+            position: absolute;
+            top: 50%;
+            left: 0;
+            transform: translateY(-50%);
+            height: 6px;
+            background: linear-gradient(90deg, var(--secondary), var(--primary), var(--tertiary));
+            border-radius: 12px;
+            pointer-events: none;
+            transition: width 0.1s ease;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            position: relative;
+            z-index: 2;
+            box-shadow: 
+                0 2px 8px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(0, 255, 136, 0.6);
+            transition: all 0.2s ease;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            background: var(--text-primary);
+            border-radius: 50%;
+            cursor: pointer;
+            border: none;
+            box-shadow: 
+                0 2px 8px rgba(0, 0, 0, 0.3),
+                0 0 20px rgba(0, 255, 136, 0.6);
+            transition: all 0.2s ease;
+        }
+        
+        .slider::-webkit-slider-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 
+                0 2px 12px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(0, 255, 136, 0.8);
+        }
+        
+        .slider::-moz-range-thumb:hover {
+            transform: scale(1.2);
+            box-shadow: 
+                0 2px 12px rgba(0, 0, 0, 0.4),
+                0 0 30px rgba(0, 255, 136, 0.8);
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        
+        .stat-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px;
+            transition: all 0.3s ease;
+            text-align: center;
+            min-height: 55px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .stat-item:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(0, 255, 136, 0.3);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.1);
+        }
+        
+        .stat-label {
+            font-size: 10px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 4px;
+            font-weight: 500;
+            opacity: 0.8;
+        }
+        
+        .stat-value {
+            font-size: 18px;
+            font-weight: 700;
+            color: var(--primary);
+            font-variant-numeric: tabular-nums;
+            line-height: 1;
+            transition: all 0.3s ease;
+        }
+        
+        .stat-item:hover .stat-value {
+            transform: scale(1.05);
+        }
+        
+        .wave-visualizer {
+            position: absolute;
+            bottom: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 60%;
+            max-width: 800px;
+            height: 100px;
+            display: flex;
+            align-items: end;
+            justify-content: center;
+            gap: 2px;
+            padding: 20px;
+            background: var(--glass-bg);
+            backdrop-filter: blur(20px);
+            border: 1px solid var(--glass-border);
+            border-radius: 24px;
+            overflow: hidden;
+        }
+        
+        .wave-bar {
+            flex: 1;
+            background: linear-gradient(to top, var(--secondary), var(--primary));
+            border-radius: 2px 2px 0 0;
+            transition: height 0.1s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .wave-bar::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: rgba(255, 255, 255, 0.8);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.6);
+        }
+        
+        .cursor {
+            position: absolute;
+            width: 24px;
+            height: 24px;
+            pointer-events: none;
+            z-index: 10000;
+            transition: all 0.1s ease;
+            transform: translate(-50%, -50%);
+        }
+        
+        .cursor-ring {
+            position: absolute;
+            inset: 0;
+            border: 2px solid var(--primary);
+            border-radius: 50%;
+            animation: cursorPulse 2s ease-in-out infinite;
+        }
+        
+        .cursor-dot {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 4px;
+            background: var(--primary);
+            border-radius: 50%;
+            box-shadow: 0 0 10px var(--primary);
+        }
+        
+        .button {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 12px 20px;
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .button::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        
+        .button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 20px rgba(0, 255, 136, 0.3);
+            border-color: var(--primary);
+        }
+        
+        .button:hover::before {
+            opacity: 0.1;
+        }
+        
+        .button.active {
+            background: linear-gradient(135deg, var(--primary), var(--secondary));
+            color: var(--bg-primary);
+        }
+        
+        .tooltip {
+            position: absolute;
+            background: var(--bg-primary);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 8px 12px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            pointer-events: none;
+            opacity: 0;
+            transform: translateY(10px);
+            transition: all 0.2s ease;
+            z-index: 1000;
+            white-space: nowrap;
+        }
+        
+        .tooltip.show {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        @keyframes gradientShift {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        
+        @keyframes cursorPulse {
+            0%, 100% { 
+                transform: scale(1);
+                opacity: 1;
+            }
+            50% { 
+                transform: scale(1.5);
+                opacity: 0.5;
+            }
+        }
+        
+        @media (max-width: 768px) {
+            .controls, .stats {
+                width: calc(100% - 64px);
+            }
+            
+            .controls {
+                top: auto;
+                bottom: 200px;
+            }
+            
+            .wave-visualizer {
+                width: calc(100% - 64px);
+            }
+            
+            .theme-switcher, .presets {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <canvas id="canvas"></canvas>
+    
+    <div class="cursor" id="cursor">
+        <div class="cursor-ring"></div>
+        <div class="cursor-dot"></div>
+    </div>
+    
+    <div class="ui-container">
+        <div class="ui-panel controls" id="controlsPanel">
+            <div class="panel-header">
+                <h2 class="panel-title">
+                    <svg class="panel-icon" viewBox="0 0 24 24">
+                        <path d="M12 2L2 7v10c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-10-5z"/>
+                    </svg>
+                    Controls
+                </h2>
+                <button class="minimize-btn" onclick="togglePanel('controlsPanel')">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="control-group">
+                    <label class="control-label">
+                        Particle Density
+                        <span class="control-value" id="particleValue">600</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="particleCount" min="100" max="2000" value="600">
+                        <div class="slider-track" id="particleTrack"></div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        Flow Velocity
+                        <span class="control-value" id="flowValue">1.8</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="flowSpeed" min="0.1" max="5" value="1.8" step="0.1">
+                        <div class="slider-track" id="flowTrack"></div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        Connection Range
+                        <span class="control-value" id="connectionValue">100</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="connectionDistance" min="50" max="200" value="100">
+                        <div class="slider-track" id="connectionTrack"></div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        Gravity Force
+                        <span class="control-value" id="gravityValue">0.3</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="gravityStrength" min="0" max="2" value="0.3" step="0.05">
+                        <div class="slider-track" id="gravityTrack"></div>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <label class="control-label">
+                        Energy Field
+                        <span class="control-value" id="energyValue">50</span>
+                    </label>
+                    <div class="slider-container">
+                        <input type="range" class="slider" id="energyField" min="0" max="100" value="50">
+                        <div class="slider-track" id="energyTrack"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="ui-panel stats" id="statsPanel">
+            <div class="panel-header">
+                <h2 class="panel-title">
+                    <svg class="panel-icon" viewBox="0 0 24 24">
+                        <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
+                    </svg>
+                    Statistics
+                </h2>
+                <button class="minimize-btn" onclick="togglePanel('statsPanel')">
+                    <svg viewBox="0 0 24 24">
+                        <path d="M7 10l5 5 5-5z"/>
+                    </svg>
+                </button>
+            </div>
+            
+            <div class="panel-content">
+                <div class="stat-grid">
+                    <div class="stat-item">
+                        <div class="stat-label">FPS</div>
+                        <div class="stat-value" id="fps">60</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Particles</div>
+                        <div class="stat-value" id="particleDisplay">600</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Connections</div>
+                        <div class="stat-value" id="connections">0</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-label">Energy</div>
+                        <div class="stat-value" id="energy">0</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="ui-panel theme-switcher">
+            <button class="button active" data-theme="default">Default</button>
+            <button class="button" data-theme="neon">Neon</button>
+            <button class="button" data-theme="ocean">Ocean</button>
+            <button class="button" data-theme="sunset">Sunset</button>
+        </div>
+        
+        <div class="ui-panel presets">
+            <button class="button" data-preset="calm">Calm</button>
+            <button class="button" data-preset="dynamic">Dynamic</button>
+            <button class="button" data-preset="chaos">Chaos</button>
+            <button class="button" data-preset="minimal">Minimal</button>
+        </div>
+        
+        <div class="wave-visualizer" id="waveVisualizer"></div>
+    </div>
+    
+    <div class="tooltip" id="tooltip"></div>
+
+    <script>
+        // Add toggle panel function
+        function togglePanel(panelId) {
+            const panel = document.getElementById(panelId);
+            panel.classList.toggle('minimized');
+            
+            // Save state to localStorage
+            const isMinimized = panel.classList.contains('minimized');
+            localStorage.setItem(`${panelId}_minimized`, isMinimized);
+        }
+        
+        // Restore panel states on load
+        window.addEventListener('DOMContentLoaded', () => {
+            const panels = ['controlsPanel', 'statsPanel'];
+            panels.forEach(panelId => {
+                const isMinimized = localStorage.getItem(`${panelId}_minimized`) === 'true';
+                if (isMinimized) {
+                    document.getElementById(panelId).classList.add('minimized');
+                }
+            });
+        });
+        
+        class NexusViz {
+            constructor() {
+                this.canvas = document.getElementById('canvas');
+                this.ctx = this.canvas.getContext('2d', { 
+                    alpha: false
+                });
+                this.particles = [];
+                this.particlePool = [];
+                this.mouse = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
+                this.cursor = document.getElementById('cursor');
+                this.tooltip = document.getElementById('tooltip');
+                this.audioData = [];
+                this.time = 0;
+                this.frameCount = 0;
+                this.lastFrameTime = 0;
+                this.fps = 60;
+                this.animationId = null;
+                
+                this.performance = {
+                    maxParticles: 2000,
+                    connectionCheckRadius: 200,
+                    trailLength: 5,
+                    glowEnabled: true,
+                    qualityLevel: this.detectPerformanceLevel()
+                };
+                
+                this.config = {
+                    particleCount: 600,
+                    flowSpeed: 1.8,
+                    connectionDistance: 100,
+                    gravityStrength: 0.3,
+                    energyField: 50
+                };
+                
+                this.themes = {
+                    default: {
+                        primary: [0, 255, 136],
+                        secondary: [255, 0, 128],
+                        tertiary: [0, 180, 255],
+                        accent: [255, 170, 0]
+                    },
+                    neon: {
+                        primary: [255, 0, 255],
+                        secondary: [0, 255, 255],
+                        tertiary: [255, 255, 0],
+                        accent: [255, 0, 128]
+                    },
+                    ocean: {
+                        primary: [0, 200, 255],
+                        secondary: [0, 100, 200],
+                        tertiary: [0, 255, 200],
+                        accent: [100, 200, 255]
+                    },
+                    sunset: {
+                        primary: [255, 100, 50],
+                        secondary: [255, 50, 100],
+                        tertiary: [255, 200, 50],
+                        accent: [200, 50, 255]
+                    }
+                };
+                
+                this.currentTheme = 'default';
+                this.colors = this.themes[this.currentTheme];
+                
+                this.presets = {
+                    calm: {
+                        particleCount: 400,
+                        flowSpeed: 0.8,
+                        connectionDistance: 80,
+                        gravityStrength: 0.1,
+                        energyField: 20
+                    },
+                    dynamic: {
+                        particleCount: 800,
+                        flowSpeed: 2.5,
+                        connectionDistance: 120,
+                        gravityStrength: 0.5,
+                        energyField: 70
+                    },
+                    chaos: {
+                        particleCount: 1500,
+                        flowSpeed: 4,
+                        connectionDistance: 150,
+                        gravityStrength: 1.5,
+                        energyField: 100
+                    },
+                    minimal: {
+                        particleCount: 200,
+                        flowSpeed: 0.5,
+                        connectionDistance: 60,
+                        gravityStrength: 0.05,
+                        energyField: 10
+                    }
+                };
+                
+                this.init();
+            }
+            
+            detectPerformanceLevel() {
+                const memory = navigator.deviceMemory || 4;
+                const cores = navigator.hardwareConcurrency || 4;
+                
+                if (memory >= 8 && cores >= 8) return 'high';
+                if (memory >= 4 && cores >= 4) return 'medium';
+                return 'low';
+            }
+            
+            init() {
+                this.setupCanvas();
+                this.adjustQualitySettings();
+                this.createParticles();
+                this.setupEventListeners();
+                this.initializeSliders();
+                this.generateAudioData();
+                this.animate();
+            }
+            
+            adjustQualitySettings() {
+                switch (this.performance.qualityLevel) {
+                    case 'low':
+                        this.performance.trailLength = 3;
+                        this.performance.glowEnabled = false;
+                        this.performance.connectionCheckRadius = 150;
+                        break;
+                    case 'medium':
+                        this.performance.trailLength = 5;
+                        this.performance.glowEnabled = true;
+                        this.performance.connectionCheckRadius = 180;
+                        break;
+                    case 'high':
+                        this.performance.trailLength = 8;
+                        this.performance.glowEnabled = true;
+                        this.performance.connectionCheckRadius = 200;
+                        break;
+                }
+            }
+            
+            setupCanvas() {
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+            
+            resizeCanvas() {
+                const dpr = window.devicePixelRatio || 1;
+                this.canvas.width = window.innerWidth * dpr;
+                this.canvas.height = window.innerHeight * dpr;
+                this.canvas.style.width = window.innerWidth + 'px';
+                this.canvas.style.height = window.innerHeight + 'px';
+                this.ctx.scale(dpr, dpr);
+            }
+            
+            createParticles() {
+                const targetCount = Math.min(this.config.particleCount, this.performance.maxParticles);
+                const currentCount = this.particles.length;
+                
+                if (currentCount < targetCount) {
+                    for (let i = currentCount; i < targetCount; i++) {
+                        const particle = this.createParticle();
+                        this.particles.push(particle);
+                    }
+                } else if (currentCount > targetCount) {
+                    this.particles.splice(targetCount);
+                }
+            }
+            
+            createParticle(x, y) {
+                const colorIndex = Math.floor(Math.random() * 4);
+                const colorKey = Object.keys(this.colors)[colorIndex];
+                
+                return {
+                    x: x !== undefined ? x : Math.random() * window.innerWidth,
+                    y: y !== undefined ? y : Math.random() * window.innerHeight,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: (Math.random() - 0.5) * 2,
+                    size: Math.random() * 2.5 + 0.5,
+                    baseSize: Math.random() * 2.5 + 0.5,
+                    color: this.colors[colorKey],
+                    alpha: Math.random() * 0.6 + 0.4,
+                    phase: Math.random() * Math.PI * 2,
+                    energy: Math.random() * 100,
+                    life: 1,
+                    trail: new Array(this.performance.trailLength),
+                    trailIndex: 0,
+                    connections: [],
+                    active: true,
+                    explosion: false,
+                    decay: 0
+                };
+            }
+            
+            resetParticle(particle) {
+                particle.x = Math.random() * window.innerWidth;
+                particle.y = Math.random() * window.innerHeight;
+                particle.vx = (Math.random() - 0.5) * 2;
+                particle.vy = (Math.random() - 0.5) * 2;
+                particle.energy = Math.random() * 100;
+                particle.life = 1;
+                particle.active = true;
+                particle.explosion = false;
+                particle.trailIndex = 0;
+            }
+            
+            setupEventListeners() {
+                // Mouse movement
+                document.addEventListener('mousemove', (e) => {
+                    this.mouse.x = e.clientX;
+                    this.mouse.y = e.clientY;
+                    this.updateCursor();
+                });
+                
+                // Touch support
+                document.addEventListener('touchmove', (e) => {
+                    if (e.touches.length > 0) {
+                        this.mouse.x = e.touches[0].clientX;
+                        this.mouse.y = e.touches[0].clientY;
+                        this.updateCursor();
+                    }
+                });
+                
+                // Click interaction
+                document.addEventListener('click', (e) => {
+                    // Don't create explosion if clicking on UI elements
+                    if (!e.target.closest('.ui-panel')) {
+                        this.createExplosion(e.clientX, e.clientY);
+                    }
+                });
+                
+                // Control listeners with live update
+                this.setupSlider('particleCount', 'particleValue', 'particleTrack', (value) => {
+                    this.config.particleCount = parseInt(value);
+                    this.createParticles();
+                    document.getElementById('particleDisplay').textContent = value;
+                });
+                
+                this.setupSlider('flowSpeed', 'flowValue', 'flowTrack', (value) => {
+                    this.config.flowSpeed = parseFloat(value);
+                });
+                
+                this.setupSlider('connectionDistance', 'connectionValue', 'connectionTrack', (value) => {
+                    this.config.connectionDistance = parseInt(value);
+                });
+                
+                this.setupSlider('gravityStrength', 'gravityValue', 'gravityTrack', (value) => {
+                    this.config.gravityStrength = parseFloat(value);
+                });
+                
+                this.setupSlider('energyField', 'energyValue', 'energyTrack', (value) => {
+                    this.config.energyField = parseInt(value);
+                });
+                
+                // Theme switcher
+                document.querySelectorAll('[data-theme]').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const theme = e.target.dataset.theme;
+                        this.switchTheme(theme);
+                        
+                        // Update active state
+                        document.querySelectorAll('[data-theme]').forEach(b => b.classList.remove('active'));
+                        e.target.classList.add('active');
+                    });
+                });
+                
+                // Preset buttons
+                document.querySelectorAll('[data-preset]').forEach(button => {
+                    button.addEventListener('click', (e) => {
+                        const preset = e.target.dataset.preset;
+                        this.applyPreset(preset);
+                        
+                        // Visual feedback
+                        e.target.style.transform = 'scale(0.95)';
+                        setTimeout(() => {
+                            e.target.style.transform = '';
+                        }, 200);
+                    });
+                });
+                
+                // Keyboard shortcuts
+                document.addEventListener('keydown', (e) => {
+                    switch(e.key) {
+                        case ' ':
+                            e.preventDefault();
+                            this.togglePause();
+                            break;
+                        case 'r':
+                            this.createParticles();
+                            break;
+                        case 'c':
+                            this.clearParticles();
+                            break;
+                    }
+                });
+            }
+            
+            setupSlider(sliderId, valueId, trackId, callback) {
+                const slider = document.getElementById(sliderId);
+                const valueDisplay = document.getElementById(valueId);
+                const track = document.getElementById(trackId);
+                
+                const updateSlider = () => {
+                    const value = slider.value;
+                    const min = parseFloat(slider.min);
+                    const max = parseFloat(slider.max);
+                    const percent = ((parseFloat(value) - min) / (max - min)) * 100;
+                    
+                    // Update track width
+                    track.style.width = percent + '%';
+                    
+                    // Update value display
+                    valueDisplay.textContent = value;
+                    
+                    // Call callback
+                    callback(value);
+                };
+                
+                slider.addEventListener('input', updateSlider);
+                
+                // Also handle mouse events for better responsiveness
+                slider.addEventListener('mousedown', () => {
+                    const handleMouseMove = () => updateSlider();
+                    const handleMouseUp = () => {
+                        document.removeEventListener('mousemove', handleMouseMove);
+                        document.removeEventListener('mouseup', handleMouseUp);
+                    };
+                    document.addEventListener('mousemove', handleMouseMove);
+                    document.addEventListener('mouseup', handleMouseUp);
+                });
+            }
+            
+            initializeSliders() {
+                // Initialize all slider tracks to their starting positions
+                const sliders = [
+                    { id: 'particleCount', track: 'particleTrack' },
+                    { id: 'flowSpeed', track: 'flowTrack' },
+                    { id: 'connectionDistance', track: 'connectionTrack' },
+                    { id: 'gravityStrength', track: 'gravityTrack' },
+                    { id: 'energyField', track: 'energyTrack' }
+                ];
+                
+                sliders.forEach(({ id, track }) => {
+                    const slider = document.getElementById(id);
+                    const trackElement = document.getElementById(track);
+                    const min = parseFloat(slider.min);
+                    const max = parseFloat(slider.max);
+                    const value = parseFloat(slider.value);
+                    const percent = ((value - min) / (max - min)) * 100;
+                    trackElement.style.width = percent + '%';
+                });
+            }
+            
+            switchTheme(theme) {
+                this.currentTheme = theme;
+                this.colors = this.themes[theme];
+                
+                // Update existing particles
+                this.particles.forEach(particle => {
+                    const colorIndex = Math.floor(Math.random() * 4);
+                    const colorKey = Object.keys(this.colors)[colorIndex];
+                    particle.color = this.colors[colorKey];
+                });
+                
+                // Update CSS variables
+                const root = document.documentElement;
+                if (theme === 'neon') {
+                    root.style.setProperty('--primary', '#ff00ff');
+                    root.style.setProperty('--secondary', '#00ffff');
+                } else if (theme === 'ocean') {
+                    root.style.setProperty('--primary', '#00c8ff');
+                    root.style.setProperty('--secondary', '#00ffc8');
+                } else if (theme === 'sunset') {
+                    root.style.setProperty('--primary', '#ff6432');
+                    root.style.setProperty('--secondary', '#ff3264');
+                } else {
+                    root.style.setProperty('--primary', '#00ff88');
+                    root.style.setProperty('--secondary', '#ff0080');
+                }
+            }
+            
+            applyPreset(preset) {
+                const settings = this.presets[preset];
+                
+                // Animate the changes
+                Object.entries(settings).forEach(([key, value]) => {
+                    this.config[key] = value;
+                    
+                    // Update UI
+                    const slider = document.getElementById(key);
+                    const valueDisplay = document.getElementById(key.replace(/([A-Z])/g, (match) => match.toLowerCase()) + 'Value');
+                    const track = document.getElementById(key.replace(/([A-Z])/g, (match) => match.toLowerCase()) + 'Track');
+                    
+                    if (slider && valueDisplay && track) {
+                        slider.value = value;
+                        valueDisplay.textContent = value;
+                        
+                        const min = parseFloat(slider.min);
+                        const max = parseFloat(slider.max);
+                        const percent = ((parseFloat(value) - min) / (max - min)) * 100;
+                        track.style.width = percent + '%';
+                    }
+                });
+                
+                this.createParticles();
+                document.getElementById('particleDisplay').textContent = settings.particleCount;
+                
+                // Show tooltip
+                this.showTooltip(`Preset "${preset}" applied`, this.mouse.x, this.mouse.y);
+            }
+            
+            showTooltip(text, x, y) {
+                this.tooltip.textContent = text;
+                this.tooltip.style.left = x + 'px';
+                this.tooltip.style.top = (y - 40) + 'px';
+                this.tooltip.classList.add('show');
+                
+                setTimeout(() => {
+                    this.tooltip.classList.remove('show');
+                }, 2000);
+            }
+            
+            updateCursor() {
+                this.cursor.style.left = this.mouse.x + 'px';
+                this.cursor.style.top = this.mouse.y + 'px';
+            }
+            
+            createExplosion(x, y) {
+                const explosionParticles = 40;
+                for (let i = 0; i < explosionParticles; i++) {
+                    const angle = (Math.PI * 2 / explosionParticles) * i;
+                    const speed = Math.random() * 20 + 10;
+                    const particle = this.createParticle(x, y);
+                    
+                    particle.vx = Math.cos(angle) * speed;
+                    particle.vy = Math.sin(angle) * speed;
+                    particle.size = Math.random() * 4 + 2;
+                    particle.life = 100;
+                    particle.decay = 0.01;
+                    particle.explosion = true;
+                    particle.color = this.colors.primary;
+                    
+                    this.particles.push(particle);
+                }
+                
+                // Remove oldest particles if too many
+                if (this.particles.length > this.config.particleCount + 100) {
+                    this.particles.splice(0, explosionParticles);
+                }
+            }
+            
+            generateAudioData() {
+                setInterval(() => {
+                    const bars = 40;
+                    this.audioData = [];
+                    
+                    for (let i = 0; i < bars; i++) {
+                        const frequency = i / bars;
+                        const time = this.time * 0.001;
+                        
+                        const wave = Math.sin(time * 2 + frequency * Math.PI * 4) * 30 +
+                                    Math.cos(time * 1.5 + frequency * Math.PI * 6) * 20;
+                        const value = Math.max(5, 50 + wave + (Math.random() - 0.5) * 10);
+                        this.audioData.push(value);
+                    }
+                    
+                    this.updateWaveVisualizer();
+                }, 100);
+            }
+            
+            updateWaveVisualizer() {
+                const container = document.getElementById('waveVisualizer');
+                if (!container) return;
+                
+                // Get existing bars
+                const existingBars = container.getElementsByClassName('wave-bar');
+                const dataLength = this.audioData.length;
+                
+                // Update existing bars
+                for (let i = 0; i < Math.min(existingBars.length, dataLength); i++) {
+                    const value = this.audioData[i];
+                    const bar = existingBars[i];
+                    bar.style.height = `${value}px`;
+                    
+                    const hue = (i / dataLength) * 300 + this.time * 0.1;
+                    bar.style.background = `linear-gradient(to top, 
+                        hsl(${hue}, 100%, 50%), 
+                        hsl(${hue + 60}, 100%, 70%))`;
+                }
+                
+                // Add new bars if needed
+                for (let i = existingBars.length; i < dataLength; i++) {
+                    const bar = document.createElement('div');
+                    bar.className = 'wave-bar';
+                    container.appendChild(bar);
+                }
+                
+                // Remove extra bars
+                while (existingBars.length > dataLength) {
+                    container.removeChild(existingBars[existingBars.length - 1]);
+                }
+            }
+            
+            updateParticles() {
+                let connections = 0;
+                let totalEnergy = 0;
+                
+                // Clear connections
+                for (let i = 0; i < this.particles.length; i++) {
+                    this.particles[i].connections.length = 0;
+                }
+                
+                // Spatial grid for optimization
+                const gridSize = this.config.connectionDistance;
+                const grid = new Map();
+                
+                // Place particles in grid
+                for (let i = 0; i < this.particles.length; i++) {
+                    const particle = this.particles[i];
+                    if (!particle.active) continue;
+                    
+                    const gridX = Math.floor(particle.x / gridSize);
+                    const gridY = Math.floor(particle.y / gridSize);
+                    const key = `${gridX},${gridY}`;
+                    
+                    if (!grid.has(key)) {
+                        grid.set(key, []);
+                    }
+                    grid.get(key).push(i);
+                }
+                
+                // Update particles
+                for (let i = 0; i < this.particles.length; i++) {
+                    const particle = this.particles[i];
+                    if (!particle.active) continue;
+                    
+                    // Mouse interaction
+                    const dx = this.mouse.x - particle.x;
+                    const dy = this.mouse.y - particle.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < 40000 && distSq > 0) {
+                        const distance = Math.sqrt(distSq);
+                        const force = (200 - distance) / 200 * this.config.gravityStrength;
+                        const invDist = 1 / distance;
+                        particle.vx += dx * invDist * force * 0.5;
+                        particle.vy += dy * invDist * force * 0.5;
+                        particle.energy = Math.min(particle.energy + force * 20, 100);
+                    }
+                    
+                    // Field effects
+                    const fieldStrength = this.config.energyField * 0.002;
+                    particle.vx += Math.sin(this.time * 0.001 + particle.phase) * fieldStrength;
+                    particle.vy += Math.cos(this.time * 0.001 + particle.phase * 1.5) * fieldStrength;
+                    
+                    // Apply velocity
+                    particle.x += particle.vx * this.config.flowSpeed;
+                    particle.y += particle.vy * this.config.flowSpeed;
+                    
+                    // Friction
+                    particle.vx *= 0.98;
+                    particle.vy *= 0.98;
+                    
+                    // Boundary wrapping
+                    const margin = 50;
+                    if (particle.x < -margin) particle.x = window.innerWidth + margin;
+                    else if (particle.x > window.innerWidth + margin) particle.x = -margin;
+                    if (particle.y < -margin) particle.y = window.innerHeight + margin;
+                    else if (particle.y > window.innerHeight + margin) particle.y = -margin;
+                    
+                    // Update properties
+                    particle.phase += 0.02;
+                    particle.size = particle.baseSize + Math.sin(particle.phase) * 0.5;
+                    particle.energy *= 0.98;
+                    totalEnergy += particle.energy;
+                    
+                    // Trail update
+                    if (!particle.trail[particle.trailIndex]) {
+                        particle.trail[particle.trailIndex] = {};
+                    }
+                    particle.trail[particle.trailIndex].x = particle.x;
+                    particle.trail[particle.trailIndex].y = particle.y;
+                    particle.trail[particle.trailIndex].size = particle.size * 0.5;
+                    particle.trailIndex = (particle.trailIndex + 1) % this.performance.trailLength;
+                    
+                    // Handle explosion particles
+                    if (particle.explosion) {
+                        particle.life--;
+                        particle.alpha -= particle.decay;
+                        if (particle.life <= 0 || particle.alpha <= 0) {
+                            particle.active = false;
+                            this.particlePool.push(particle);
+                            this.particles.splice(i, 1);
+                            i--;
+                            continue;
+                        }
+                    }
+                    
+                    // Find connections
+                    const gridX = Math.floor(particle.x / gridSize);
+                    const gridY = Math.floor(particle.y / gridSize);
+                    
+                    for (let gx = gridX - 1; gx <= gridX + 1; gx++) {
+                        for (let gy = gridY - 1; gy <= gridY + 1; gy++) {
+                            const key = `${gx},${gy}`;
+                            const cellParticles = grid.get(key);
+                            if (!cellParticles) continue;
+                            
+                            for (const j of cellParticles) {
+                                if (j <= i) continue;
+                                
+                                const other = this.particles[j];
+                                if (!other || !other.active) continue;
+                                
+                                const dx = particle.x - other.x;
+                                const dy = particle.y - other.y;
+                                const distSq = dx * dx + dy * dy;
+                                
+                                if (distSq < this.config.connectionDistance * this.config.connectionDistance) {
+                                    particle.connections.push({ 
+                                        particle: other, 
+                                        distance: Math.sqrt(distSq) 
+                                    });
+                                    connections++;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                // Update stats
+                if (this.frameCount % 5 === 0) {
+                    document.getElementById('connections').textContent = connections;
+                    document.getElementById('energy').textContent = Math.round(totalEnergy);
+                }
+            }
+            
+            drawBackground() {
+                // Use a gradient background for better visual appeal
+                const gradient = this.ctx.createRadialGradient(
+                    window.innerWidth / 2, 
+                    window.innerHeight / 2, 
+                    0,
+                    window.innerWidth / 2, 
+                    window.innerHeight / 2, 
+                    Math.max(window.innerWidth, window.innerHeight) * 0.7
+                );
+                
+                gradient.addColorStop(0, '#0a0520');
+                gradient.addColorStop(1, '#030014');
+                
+                this.ctx.fillStyle = gradient;
+                this.ctx.fillRect(0, 0, window.innerWidth, window.innerHeight);
+            }
+            
+            drawConnections() {
+                this.ctx.save();
+                this.ctx.globalCompositeOperation = 'screen';
+                
+                this.particles.forEach(particle => {
+                    if (!particle.active) return;
+                    
+                    particle.connections.forEach(connection => {
+                        const { particle: other, distance } = connection;
+                        if (!other || !other.active) return;
+                        
+                        const alpha = Math.pow(1 - distance / this.config.connectionDistance, 2) * 0.2;
+                        
+                        if (alpha > 0.02) {
+                            this.ctx.strokeStyle = `rgba(0, 255, 136, ${alpha})`;
+                            this.ctx.lineWidth = 0.5;
+                            this.ctx.beginPath();
+                            this.ctx.moveTo(particle.x, particle.y);
+                            this.ctx.lineTo(other.x, other.y);
+                            this.ctx.stroke();
+                        }
+                    });
+                });
+                
+                this.ctx.restore();
+            }
+            
+            drawParticles() {
+                this.particles.forEach(particle => {
+                    if (!particle.active) return;
+                    
+                    // Trail
+                    if (this.performance.qualityLevel !== 'low' && particle.trail) {
+                        for (let i = 0; i < this.performance.trailLength; i++) {
+                            const point = particle.trail[i];
+                            if (!point || !point.x || !point.y) continue;
+                            
+                            const progress = i / this.performance.trailLength;
+                            const trailAlpha = progress * particle.alpha * 0.1;
+                            
+                            if (trailAlpha > 0.01) {
+                                this.ctx.fillStyle = `rgba(${particle.color.join(',')}, ${trailAlpha})`;
+                                this.ctx.beginPath();
+                                this.ctx.arc(point.x, point.y, point.size * progress * 0.8, 0, Math.PI * 2);
+                                this.ctx.fill();
+                            }
+                        }
+                    }
+                    
+                    // Glow
+                    if (this.performance.glowEnabled && particle.energy > 30) {
+                        const glowSize = particle.size * 2.5;
+                        const gradient = this.ctx.createRadialGradient(
+                            particle.x, particle.y, particle.size,
+                            particle.x, particle.y, glowSize
+                        );
+                        gradient.addColorStop(0, `rgba(${particle.color.join(',')}, ${particle.alpha * 0.3})`);
+                        gradient.addColorStop(1, `rgba(${particle.color.join(',')}, 0)`);
+                        
+                        this.ctx.fillStyle = gradient;
+                        this.ctx.beginPath();
+                        this.ctx.arc(particle.x, particle.y, glowSize, 0, Math.PI * 2);
+                        this.ctx.fill();
+                    }
+                    
+                    // Core particle
+                    this.ctx.fillStyle = `rgba(${particle.color.join(',')}, ${particle.alpha})`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                    this.ctx.fill();
+                    
+                    // Inner dot
+                    this.ctx.fillStyle = `rgba(255, 255, 255, ${particle.alpha * 0.9})`;
+                    this.ctx.beginPath();
+                    this.ctx.arc(particle.x, particle.y, particle.size * 0.3, 0, Math.PI * 2);
+                    this.ctx.fill();
+                });
+            }
+            
+            animate(currentTime = 0) {
+                this.animationId = requestAnimationFrame((time) => this.animate(time));
+                
+                // Calculate delta time
+                if (this.lastFrameTime === 0) {
+                    this.lastFrameTime = currentTime;
+                }
+                
+                const deltaTime = currentTime - this.lastFrameTime;
+                
+                // Only skip frame if we have a valid last frame time and delta is too small
+                if (this.lastFrameTime > 0 && deltaTime < 16) return;
+                
+                this.lastFrameTime = currentTime;
+                
+                // Update FPS counter
+                if (this.frameCount % 60 === 0 && deltaTime > 0) {
+                    const instantFps = Math.round(1000 / deltaTime);
+                    this.fps = Math.round(this.fps * 0.9 + instantFps * 0.1);
+                    document.getElementById('fps').textContent = this.fps;
+                    
+                    // Dynamic quality adjustment
+                    if (this.fps < 30 && this.performance.glowEnabled) {
+                        this.performance.glowEnabled = false;
+                    } else if (this.fps > 50 && !this.performance.glowEnabled && this.performance.qualityLevel !== 'low') {
+                        this.performance.glowEnabled = true;
+                    }
+                }
+                
+                this.time = currentTime;
+                
+                // Clear and render
+                this.drawBackground();
+                this.updateParticles();
+                this.drawConnections();
+                this.drawParticles();
+                
+                this.frameCount++;
+            }
+            
+            togglePause() {
+                if (this.animationId) {
+                    cancelAnimationFrame(this.animationId);
+                    this.animationId = null;
+                    this.showTooltip('Paused', window.innerWidth / 2, window.innerHeight / 2);
+                } else {
+                    this.animate();
+                    this.showTooltip('Resumed', window.innerWidth / 2, window.innerHeight / 2);
+                }
+            }
+            
+            clearParticles() {
+                this.particles = [];
+                this.showTooltip('Particles cleared', window.innerWidth / 2, window.innerHeight / 2);
+            }
+        }
+        
+        // Initialize when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                new NexusViz();
+            });
+        } else {
+            new NexusViz();
+        }
+    </script>
+</body>
+</html>
